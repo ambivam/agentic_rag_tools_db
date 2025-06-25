@@ -32,6 +32,8 @@ sentence-transformers>=2.2.2
 # Database and ORM
 sqlalchemy>=2.0.23
 mysql-connector-python>=8.2.0
+pymongo>=4.6.0
+motor>=3.3.0
 
 # Web framework and UI
 streamlit==1.31.0
