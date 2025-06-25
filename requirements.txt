@@ -1,0 +1,57 @@
+
+# Core frameworks
+streamlit==1.28.1
+langchain==0.0.350
+langchain-core==0.1.18
+langgraph==0.0.26
+openai>=1.10.0
+python-dotenv==1.0.0
+
+# Document processing
+pypdf==3.17.1
+python-docx==1.1.0
+openpyxl==3.1.2
+python-pptx==0.6.23
+beautifulsoup4==4.12.2
+lxml==4.9.3
+
+# Data processing
+pandas==2.1.4
+numpy==1.24.3
+
+# Vector database and embeddings
+faiss-cpu==1.7.4
+sentence-transformers==2.2.2
+
+# Text processing
+tiktoken==0.5.2
+
+# Core dependencies
+typing-extensions==4.8.0
+pydantic==2.5.0
+sqlalchemy==2.0.23
+
+# Database tools (optional)
+mysql-connector-python==8.2.0
+pymongo==4.6.0
+
+# Web scraping and search tools
+requests==2.31.0
+beautifulsoup4==4.12.2
+urllib3==2.1.0
+
+# Mathematical tools
+sympy==1.12
+scipy==1.11.4
+
+# Enhanced langchain
+langchain-community==0.0.13
+langchain-openai==0.0.2
+
+# Windows-specific compatibility packages
+# These are automatically installed on Windows if needed
+pywin32>=227; sys_platform == "win32"
+colorama>=0.4.4; sys_platform == "win32"
+
+# Cross-platform path handling
+pathlib2>=2.3.0; python_version < "3.4"
