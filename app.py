@@ -740,7 +740,7 @@ def handle_enhanced_query_interface(enhanced_workflow, vector_store_manager):
                             # Active agents display
                             st.markdown("**Active Agents:**")
                             for agent in result['active_agents']:
-                                st.badge(f"🤖 {agent.title()}", type="secondary")
+                                st.markdown(f"<span style='background-color: #f0f2f6; padding: 0.2rem 0.6rem; border-radius: 0.8rem; font-size: 0.8rem;'>🤖 {agent.title()}</span>", unsafe_allow_html=True)
                         
                         # Sources
                         if result.get('sources'):
