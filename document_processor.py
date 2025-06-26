@@ -7,6 +7,7 @@ import streamlit as st
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.schema import Document
 import logging
+from datetime import datetime
 
 # File format specific imports
 try:
@@ -35,6 +36,22 @@ class DocumentProcessor:
     """Process various document formats and convert to Langchain Documents"""
     
     def __init__(self, chunk_size: int = 1000, chunk_overlap: int = 200):
+        self.content_formats = {
+            'txt': 'plain_text',
+            'md': 'markdown',
+            'pdf': 'pdf',
+            'docx': 'word',
+            'doc': 'word',
+            'csv': 'tabular',
+            'xls': 'tabular',
+            'xlsx': 'tabular',
+            'json': 'structured',
+            'xml': 'structured',
+            'html': 'markup',
+            'htm': 'markup',
+            'ppt': 'presentation',
+            'pptx': 'presentation'
+        }
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
         self.text_splitter = RecursiveCharacterTextSplitter(
@@ -44,17 +61,38 @@ class DocumentProcessor:
             separators=["\n\n", "\n", " ", ""]
         )
     
-    def process_file(self, uploaded_file) -> List[Document]:
-        """Process uploaded file based on its format"""
+    def process_file(self, file_input, file_extension: str = None, metadata: dict = None) -> List[Document]:
+        """Process file based on its format
+        
+        Args:
+            file_input: Either a file path (str) or an uploaded file object
+            file_extension: Optional file extension override
+            metadata: Optional metadata dictionary to merge with default metadata
+        """
         try:
-            file_extension = uploaded_file.name.split('.')[-1].lower()
+            # Handle both file paths and uploaded files
+            if isinstance(file_input, str):
+                filename = os.path.basename(file_input)
+                filesize = os.path.getsize(file_input)
+            else:
+                filename = file_input.name
+                filesize = file_input.size
+                file_input.seek(0)  # Reset file pointer
             
-            # Create metadata
-            metadata = {
-                "filename": uploaded_file.name,
+            # Get file extension
+            if not file_extension:
+                file_extension = filename.split('.')[-1].lower()
+            
+            # Create base metadata
+            base_metadata = {
+                "filename": filename,
                 "file_type": file_extension,
-                "file_size": uploaded_file.size
+                "file_size": filesize
             }
+            
+            # Merge with provided metadata if any
+            if metadata:
+                base_metadata.update(metadata)
             
             # Map file extensions to processor methods
             extension_map = {
@@ -76,7 +114,7 @@ class DocumentProcessor:
             # Get the appropriate processor method
             processor = extension_map.get(file_extension)
             if processor:
-                text = processor(uploaded_file)
+                text = processor(file_input)
             else:
                 raise ValueError(f"Unsupported file format: {file_extension}")
             
@@ -86,27 +124,40 @@ class DocumentProcessor:
             # Split text into chunks
             chunks = self.text_splitter.split_text(text)
             
-            # Create Document objects
+            # Create Document objects with enhanced metadata
             documents = []
             for i, chunk in enumerate(chunks):
-                chunk_metadata = metadata.copy()
+                chunk_metadata = base_metadata.copy()
                 chunk_metadata.update({
                     "chunk_id": i,
-                    "total_chunks": len(chunks)
+                    "total_chunks": len(chunks),
+                    "content_type": file_extension,
+                    "content_format": self._get_content_format(file_extension),
+                    "chunk_size": len(chunk),
+                    "is_structured": file_extension in ['csv', 'json', 'xml'],
+                    "processing_timestamp": datetime.now().isoformat()
                 })
                 documents.append(Document(page_content=chunk, metadata=chunk_metadata))
             
-            logger.info(f"Processed {uploaded_file.name}: {len(documents)} chunks created")
+            filename = file_input.name if not isinstance(file_input, str) else os.path.basename(file_input)
+            logger.info(f"Processed {filename}: {len(documents)} chunks created")
             return documents
             
         except Exception as e:
-            logger.error(f"Error processing file {uploaded_file.name}: {str(e)}")
+            filename = file_input.name if not isinstance(file_input, str) else os.path.basename(file_input)
+            logger.error(f"Error processing file {filename}: {str(e)}")
             raise e
     
-    def _process_pdf(self, uploaded_file) -> str:
+    def _process_pdf(self, file_input) -> str:
         """Process PDF file"""
         try:
-            pdf_reader = PdfReader(uploaded_file)
+            # Handle both file paths and uploaded files
+            if isinstance(file_input, str):
+                pdf_reader = PdfReader(file_input)
+            else:
+                pdf_reader = PdfReader(file_input)
+                file_input.seek(0)  # Reset file pointer
+            
             text = ""
             for page_num, page in enumerate(pdf_reader.pages):
                 page_text = page.extract_text()
@@ -117,10 +168,16 @@ class DocumentProcessor:
             logger.error(f"Error processing PDF: {str(e)}")
             raise e
     
-    def _process_docx(self, uploaded_file) -> str:
+    def _process_docx(self, file_input) -> str:
         """Process DOCX file"""
         try:
-            doc = DocxDocument(uploaded_file)
+            # Handle both file paths and uploaded files
+            if isinstance(file_input, str):
+                doc = DocxDocument(file_input)
+            else:
+                doc = DocxDocument(file_input)
+                file_input.seek(0)  # Reset file pointer
+            
             text = ""
             for paragraph in doc.paragraphs:
                 if paragraph.text.strip():
@@ -130,26 +187,38 @@ class DocumentProcessor:
             logger.error(f"Error processing DOCX: {str(e)}")
             raise e
     
-    def _process_txt(self, uploaded_file) -> str:
+    def _process_txt(self, file_input) -> str:
         """Process TXT file"""
         try:
-            text = uploaded_file.read().decode('utf-8')
+            # Handle both file paths and uploaded files
+            if isinstance(file_input, str):
+                with open(file_input, 'r', encoding='utf-8') as f:
+                    text = f.read()
+            else:
+                try:
+                    text = file_input.read().decode('utf-8')
+                except UnicodeDecodeError:
+                    # Try with different encodings if UTF-8 fails
+                    file_input.seek(0)  # Reset file pointer
+                    text = file_input.read().decode('latin-1')
+                file_input.seek(0)  # Reset file pointer
             return text
-        except UnicodeDecodeError:
-            # Try different encodings
-            uploaded_file.seek(0)
-            try:
-                text = uploaded_file.read().decode('latin-1')
-                return text
-            except Exception as e:
-                logger.error(f"Error decoding text file: {str(e)}")
-                raise e
+        except Exception as e:
+            logger.error(f"Error processing TXT: {str(e)}")
+            raise e
     
-    def _process_csv(self, uploaded_file) -> str:
+    def _process_csv(self, file_input) -> str:
         """Process CSV file"""
         try:
-            df = pd.read_csv(uploaded_file)
-            text = f"CSV File: {uploaded_file.name}\n"
+            # Handle both file paths and uploaded files
+            if isinstance(file_input, str):
+                df = pd.read_csv(file_input)
+            else:
+                df = pd.read_csv(file_input)
+                file_input.seek(0)  # Reset file pointer
+            
+            filename = file_input.name if not isinstance(file_input, str) else os.path.basename(file_input)
+            text = f"CSV File: {filename}\n"
             text += f"Columns: {', '.join(df.columns.tolist())}\n"
             text += f"Number of rows: {len(df)}\n\n"
             
@@ -162,16 +231,22 @@ class DocumentProcessor:
             logger.error(f"Error processing CSV: {str(e)}")
             raise e
     
-    def _process_excel(self, uploaded_file) -> str:
+    def _process_excel(self, file_input) -> str:
         """Process Excel file"""
         try:
-            # Read all sheets
-            excel_file = pd.ExcelFile(uploaded_file)
-            text = f"Excel File: {uploaded_file.name}\n"
+            # Handle both file paths and uploaded files
+            if isinstance(file_input, str):
+                excel_file = pd.ExcelFile(file_input)
+            else:
+                excel_file = pd.ExcelFile(file_input)
+                file_input.seek(0)  # Reset file pointer
+            
+            filename = file_input.name if not isinstance(file_input, str) else os.path.basename(file_input)
+            text = f"Excel File: {filename}\n"
             text += f"Sheets: {', '.join(excel_file.sheet_names)}\n\n"
             
             for sheet_name in excel_file.sheet_names:
-                df = pd.read_excel(uploaded_file, sheet_name=sheet_name)
+                df = pd.read_excel(file_input, sheet_name=sheet_name)
                 text += f"\n--- Sheet: {sheet_name} ---\n"
                 text += f"Columns: {', '.join(df.columns.tolist())}\n"
                 text += f"Number of rows: {len(df)}\n"
@@ -183,25 +258,34 @@ class DocumentProcessor:
             logger.error(f"Error processing Excel: {str(e)}")
             raise e
     
-    def _process_pptx(self, uploaded_file) -> str:
+    def _process_pptx(self, file_input) -> str:
         """Process PowerPoint file"""
         try:
-            prs = Presentation(uploaded_file)
-            text = f"PowerPoint File: {uploaded_file.name}\n"
-            text += f"Total slides: {len(prs.slides)}\n\n"
+            # Handle both file paths and uploaded files
+            if isinstance(file_input, str):
+                filename = os.path.basename(file_input)
+                prs = Presentation(file_input)
+            else:
+                filename = file_input.name
+                prs = Presentation(file_input)
+                file_input.seek(0)  # Reset file pointer
             
-            for slide_num, slide in enumerate(prs.slides, 1):
-                text += f"\n--- Slide {slide_num} ---\n"
+            text = f"PowerPoint File: {filename}\n\n"
+            
+            for i, slide in enumerate(prs.slides, 1):
+                text += f"\nSlide {i}:\n"
                 
-                # Extract text from shapes
+                # Process title
+                if slide.shapes.title:
+                    text += f"Title: {slide.shapes.title.text}\n"
+                
+                # Process text boxes and tables
                 for shape in slide.shapes:
-                    if hasattr(shape, "text") and shape.text.strip():
+                    if hasattr(shape, "text"):
                         text += shape.text + "\n"
-                    
-                    # Extract text from tables
-                    if shape.has_table:
-                        table = shape.table
-                        for row in table.rows:
+                    elif shape.has_table:
+                        text += "\nTable Content:\n"
+                        for row in shape.table.rows:
                             row_text = []
                             for cell in row.cells:
                                 row_text.append(cell.text)
@@ -212,21 +296,35 @@ class DocumentProcessor:
             logger.error(f"Error processing PPTX: {str(e)}")
             raise e
     
-    def _process_json(self, uploaded_file) -> str:
+    def _process_json(self, file_input) -> str:
         """Process JSON file"""
         try:
-            json_data = json.load(uploaded_file)
-            text = f"JSON File: {uploaded_file.name}\n\n"
+            # Handle both file paths and uploaded files
+            if isinstance(file_input, str):
+                with open(file_input, 'r', encoding='utf-8') as f:
+                    json_data = json.load(f)
+            else:
+                json_data = json.load(file_input)
+                file_input.seek(0)  # Reset file pointer
+            
+            filename = file_input.name if not isinstance(file_input, str) else os.path.basename(file_input)
+            text = f"JSON File: {filename}\n\n"
             text += json.dumps(json_data, indent=2, ensure_ascii=False)
             return text
         except Exception as e:
             logger.error(f"Error processing JSON: {str(e)}")
             raise e
     
-    def _process_html(self, uploaded_file) -> str:
+    def _process_html(self, file_input) -> str:
         """Process HTML file"""
         try:
-            html_content = uploaded_file.read().decode('utf-8')
+            # Handle both file paths and uploaded files
+            if isinstance(file_input, str):
+                with open(file_input, 'r', encoding='utf-8') as f:
+                    html_content = f.read()
+            else:
+                html_content = file_input.read().decode('utf-8')
+                file_input.seek(0)  # Reset file pointer
             soup = BeautifulSoup(html_content, 'html.parser')
             
             # Remove script and style elements
@@ -241,15 +339,22 @@ class DocumentProcessor:
             chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
             text = '\n'.join(chunk for chunk in chunks if chunk)
             
-            return f"HTML File: {uploaded_file.name}\n\n{text}"
+            filename = file_input.name if not isinstance(file_input, str) else os.path.basename(file_input)
+            return f"HTML File: {filename}\n\n{text}"
         except Exception as e:
             logger.error(f"Error processing HTML: {str(e)}")
             raise e
     
-    def _process_xml(self, uploaded_file) -> str:
+    def _process_xml(self, file_input) -> str:
         """Process XML file"""
         try:
-            xml_content = uploaded_file.read().decode('utf-8')
+            # Handle both file paths and uploaded files
+            if isinstance(file_input, str):
+                with open(file_input, 'r', encoding='utf-8') as f:
+                    xml_content = f.read()
+            else:
+                xml_content = file_input.read().decode('utf-8')
+                file_input.seek(0)  # Reset file pointer
             soup = BeautifulSoup(xml_content, 'xml')
             
             # Get text content
@@ -259,11 +364,16 @@ class DocumentProcessor:
             lines = (line.strip() for line in text.splitlines())
             text = '\n'.join(line for line in lines if line)
             
-            return f"XML File: {uploaded_file.name}\n\n{text}"
+            filename = file_input.name if not isinstance(file_input, str) else os.path.basename(file_input)
+            return f"XML File: {filename}\n\n{text}"
         except Exception as e:
             logger.error(f"Error processing XML: {str(e)}")
             raise e
     
+    def _get_content_format(self, extension: str) -> str:
+        """Get standardized content format for file extension"""
+        return self.content_formats.get(extension.lower(), 'unknown')
+
     def get_document_summary(self, documents: List[Document]) -> Dict[str, Any]:
         """Get summary statistics for processed documents"""
         if not documents:
@@ -272,8 +382,21 @@ class DocumentProcessor:
         total_chars = sum(len(doc.page_content) for doc in documents)
         total_words = sum(len(doc.page_content.split()) for doc in documents)
         
-        # Get unique files
-        unique_files = set(doc.metadata.get('filename', 'Unknown') for doc in documents)
+        # Get unique files and formats
+        unique_files = set()
+        format_counts = {}
+        content_types = {}
+        
+        for doc in documents:
+            metadata = doc.metadata
+            filename = metadata.get('filename', 'Unknown')
+            unique_files.add(filename)
+            
+            content_format = metadata.get('content_format', 'unknown')
+            format_counts[content_format] = format_counts.get(content_format, 0) + 1
+            
+            content_type = metadata.get('content_type', 'unknown')
+            content_types[content_type] = content_types.get(content_type, 0) + 1
         
         return {
             "total_documents": len(documents),
@@ -281,5 +404,8 @@ class DocumentProcessor:
             "total_words": total_words,
             "unique_files": len(unique_files),
             "average_chunk_size": total_chars // len(documents) if documents else 0,
-            "files": list(unique_files)
+            "files": list(unique_files),
+            "format_distribution": format_counts,
+            "content_types": content_types,
+            "has_structured_content": any(doc.metadata.get('is_structured', False) for doc in documents)
         }

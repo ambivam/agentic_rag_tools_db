@@ -81,6 +81,95 @@ def check_system_compatibility():
             """)
         return False
 
+def document_management_section():
+    """Document management section of the app"""
+    st.header("📚 Document Management")
+    
+    col1, col2 = st.columns([3, 1])
+    
+    with col1:
+        uploaded_files = st.file_uploader(
+            "Upload Documents (PDF, DOCX, TXT, CSV, JSON, etc.)",
+            accept_multiple_files=True,
+            type=Config.SUPPORTED_FORMATS
+        )
+    
+    with col2:
+        if st.button("🗑️ Clear Vector Store", type="secondary", help="Remove all documents from the vector store"):
+            try:
+                vector_store = VectorStoreManager(Config.OPENAI_API_KEY)
+                if vector_store.clear_vector_store():
+                    st.success("Vector store cleared successfully!")
+                    st.session_state.documents_processed = []
+                    st.session_state.vector_store_initialized = False
+                else:
+                    st.error("Failed to clear vector store")
+            except Exception as e:
+                st.error(f"Error clearing vector store: {str(e)}")
+    
+    if uploaded_files:
+        processor = DocumentProcessor()
+        vector_store = VectorStoreManager(Config.OPENAI_API_KEY)
+        
+        for uploaded_file in uploaded_files:
+            try:
+                # Validate file
+                if not validate_file_upload(uploaded_file, Config.MAX_FILE_SIZE, Config.SUPPORTED_FORMATS):
+                    continue
+                
+                # Process file
+                with st.spinner(f"Processing {uploaded_file.name}..."):
+                    file_content = uploaded_file.read()
+                    file_extension = uploaded_file.name.split('.')[-1].lower()
+                    
+                    # Save file temporarily
+                    temp_path = Path(Config.TEMP_DIR) / uploaded_file.name
+                    temp_path.write_bytes(file_content)
+                    
+                    # Process document
+                    documents = processor.process_file(
+                        str(temp_path),
+                        file_extension=file_extension,
+                        metadata={"filename": uploaded_file.name}
+                    )
+                    
+                    # Add to vector store
+                    if vector_store.add_documents(documents):
+                        st.success(f"✅ {uploaded_file.name} processed and added to vector store")
+                        st.session_state.documents_processed.append(uploaded_file.name)
+                        st.session_state.vector_store_initialized = True
+                    else:
+                        st.error(f"Failed to add {uploaded_file.name} to vector store")
+                    
+                    # Cleanup temp file
+                    temp_path.unlink()
+                    
+            except Exception as e:
+                st.error(f"Error processing {uploaded_file.name}: {str(e)}")
+    
+    # Show vector store info
+    if st.session_state.vector_store_initialized:
+        try:
+            vector_store = VectorStoreManager(Config.OPENAI_API_KEY)
+            store_info = vector_store.get_store_info()
+            
+            st.subheader("📊 Vector Store Status")
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.metric("Total Documents", store_info.get("total_documents", 0))
+            with col2:
+                st.metric("Total Embeddings", store_info.get("total_embeddings", 0))
+            with col3:
+                st.metric("Unique Files", store_info.get("unique_files", 0))
+            
+            # Show file list in expander
+            with st.expander("View Processed Files"):
+                for file in store_info.get("files", []):
+                    st.text(f"📄 {file}")
+        except Exception as e:
+            st.error(f"Error getting vector store info: {str(e)}")
+
 def main():
     """Main application function"""
     
@@ -98,6 +187,9 @@ def main():
     create_sidebar_info()
     
     # Show platform info if requested
+    
+    # Add document management section
+    document_management_section()
     if st.session_state.get('show_platform_info', False):
         with st.sidebar:
             st.markdown("### 🔍 Detailed System Info")
@@ -171,8 +263,7 @@ def main():
             st.session_state.vector_store_initialized = True
         
         # Create main tabs
-        tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
-            "📁 Document Upload", 
+        tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
             "🔍 Enhanced Query Interface", 
             "🧮 Calculator Tool",
             "🌐 Search Tool",
@@ -183,27 +274,24 @@ def main():
         ])
         
         with tab1:
-            handle_document_upload(doc_processor, vector_store_manager)
-        
-        with tab2:
             handle_enhanced_query_interface(enhanced_workflow, vector_store_manager)
         
-        with tab3:
+        with tab2:
             handle_calculator_tool()
             
-        with tab4:
+        with tab3:
             handle_search_tool()
             
-        with tab5:
+        with tab4:
             handle_database_tools()
         
-        with tab6:
+        with tab5:
             handle_knowledge_base(vector_store_manager)
         
-        with tab7:
+        with tab6:
             handle_settings(vector_store_manager)
             
-        with tab8:
+        with tab7:
             handle_diagnostics()
     
     except Exception as e:

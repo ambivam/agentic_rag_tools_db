@@ -215,23 +215,42 @@ Respond in JSON format with these fields:
             complexity = analysis.get('reasoning_complexity', 'moderate')
             search_scope = analysis.get('search_scope', 'broad')
             
-            # Adjust search parameters
+            # Adjust search parameters based on complexity and scope
             if complexity == 'complex':
-                k = 12
-                score_threshold = 0.01  # More lenient for complex queries
+                k = 20  # Increased for complex queries
+                score_threshold = 0.001  # Much more lenient for complex queries
+                min_docs = 10  # Ensure we get enough documents for complex analysis
             elif complexity == 'simple':
-                k = 5
-                score_threshold = 0.05  # More lenient for simple queries
-            else:
-                k = 8
-                score_threshold = 0.03  # More lenient for moderate queries
+                k = 10  # Increased for simple queries
+                score_threshold = 0.01  # More lenient for simple queries
+                min_docs = 3  # Minimum docs for simple queries
+            else:  # moderate
+                k = 15  # Increased for moderate queries
+                score_threshold = 0.005  # More lenient for moderate queries
+                min_docs = 5  # Minimum docs for moderate queries
             
-            # Perform similarity search
+            # Adjust based on search scope
+            if search_scope == 'broad':
+                k *= 2  # Double the documents for broad searches
+                score_threshold *= 2  # Double the threshold for broad searches
+            elif search_scope == 'specific':
+                min_docs = 1  # Allow specific searches to return fewer docs
+            
+            # Initial similarity search
             search_results = self.vector_store_manager.similarity_search(
                 query=query,
                 k=k,
                 score_threshold=score_threshold
             )
+            
+            # If we don't have enough documents, try a more lenient search
+            if len(search_results) < min_docs:
+                logger.info(f"Initial search found {len(search_results)} docs, trying more lenient search...")
+                search_results = self.vector_store_manager.similarity_search(
+                    query=query,
+                    k=k * 2,  # Double the number of results
+                    score_threshold=score_threshold * 10  # Much more lenient threshold
+                )
             
             if not search_results:
                 return {

@@ -21,8 +21,9 @@ class Config:
     LANGCHAIN_TRACING_V2 = os.getenv("LANGCHAIN_TRACING_V2", "true")
     LANGCHAIN_PROJECT = os.getenv("LANGCHAIN_PROJECT", "enhanced-agentic-rag-app")
     
-    # Vector Database Configuration - Cross-platform path handling
+    # Vector Database Configuration
     VECTOR_DB_PATH = str(Path(__file__).parent / "vector_store")
+    TEMP_DIR = str(Path(__file__).parent / "temp")
     CHUNK_SIZE = 1000
     CHUNK_OVERLAP = 200
     
@@ -107,6 +108,10 @@ class Config:
             # Create vector store directory
             vector_path = Path(cls.VECTOR_DB_PATH)
             vector_path.mkdir(parents=True, exist_ok=True)
+            
+            # Create temp directory
+            temp_path = Path(cls.TEMP_DIR)
+            temp_path.mkdir(parents=True, exist_ok=True)
             
             # Create data directory
             data_dir = cls.get_data_directory()
