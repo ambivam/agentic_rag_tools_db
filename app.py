@@ -956,18 +956,29 @@ def handle_search_tool():
                                     with col2:
                                         st.markdown(f"**Confidence:** {metadata.get('confidence', 0):.3f}")
                         
-                        # Generate summary
-                        if st.button("📋 Generate Summary"):
-                            with st.spinner("Generating summary..."):
-                                summary = search_tool.summarize_results(results, search_query)
-                                
-                                st.markdown("### 📝 Search Summary")
-                                st.markdown(summary.get('summary', 'No summary available'))
-                                
-                                if summary.get('key_points'):
-                                    st.markdown("**Key Points:**")
-                                    for point in summary['key_points'][:5]:
-                                        st.markdown(f"• {point.get('text', '')}")
+                        # Store results in session state
+                        st.session_state.search_results = results
+                        st.session_state.search_query = search_query
+                    
+                    else:
+                        st.error(f"❌ Search failed: {search_results.get('error', 'Unknown error')}")
+            
+        # Generate summary (outside the search button block)
+        if 'search_results' in st.session_state and st.session_state.search_results:
+            if st.button("📋 Generate Summary"):
+                with st.spinner("Generating summary..."):
+                    summary = search_tool.summarize_results(
+                        st.session_state.search_results,
+                        st.session_state.search_query
+                    )
+                    
+                    st.markdown("### 📝 Search Summary")
+                    st.markdown(summary.get('summary', 'No summary available'))
+                    
+                    if summary.get('key_points'):
+                        st.markdown("**Key Points:**")
+                        for point in summary['key_points'][:5]:
+                            st.markdown(f"• {point.get('text', '')}")
                     
                     else:
                         st.error(f"❌ Search failed: {search_results.get('error', 'Unknown error')}")

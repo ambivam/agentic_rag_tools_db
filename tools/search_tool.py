@@ -155,10 +155,25 @@ class InternetSearchTool:
             return []
     
     def _search_duckduckgo_web(self, query: str, num_results: int) -> List[Dict[str, Any]]:
-        """Search DuckDuckGo web results"""
+        """Search DuckDuckGo web results using the lite interface"""
         try:
-            url = "https://duckduckgo.com/html/"
-            params = {'q': query}
+            # Use the lite interface which is more reliable
+            url = "https://lite.duckduckgo.com/lite/"
+            params = {
+                'q': query,
+                'kl': 'us-en',  # Language/region
+                'k1': '-1'      # Safe search off
+            }
+            
+            # Add required headers
+            headers = {
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.5',
+                'DNT': '1',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1',
+            }
+            self.session.headers.update(headers)
             
             response = self.session.get(url, params=params, timeout=10)
             response.raise_for_status()
@@ -166,16 +181,26 @@ class InternetSearchTool:
             soup = BeautifulSoup(response.content, 'html.parser')
             results = []
             
-            for result in soup.find_all('div', class_='result')[:num_results]:
-                title_elem = result.find('a', class_='result__a')
-                snippet_elem = result.find('a', class_='result__snippet')
+            # Parse the lite interface results
+            for tr in soup.find_all('tr', class_=['result-sponsored', 'result-link'])[:num_results]:
+                # Get title and URL
+                link = tr.find('a')
+                if not link:
+                    continue
+                    
+                title = link.get_text(strip=True)
+                url = link.get('href', '')
                 
-                if title_elem:
+                # Get snippet from next row
+                snippet_tr = tr.find_next_sibling('tr')
+                snippet = snippet_tr.get_text(strip=True) if snippet_tr else ''
+                
+                if title and url:
                     results.append({
-                        'title': title_elem.get_text(strip=True),
-                        'snippet': snippet_elem.get_text(strip=True) if snippet_elem else '',
-                        'url': title_elem.get('href', ''),
-                        'source': 'DuckDuckGo Web',
+                        'title': title,
+                        'snippet': snippet,
+                        'url': url,
+                        'source': 'DuckDuckGo',
                         'type': 'web_result'
                     })
             

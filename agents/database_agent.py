@@ -63,25 +63,36 @@ class DatabaseAgent:
         """
         try:
             analysis_prompt = ChatPromptTemplate.from_messages([
-                ("system", """You are an expert database analysis agent. Analyze the user's request to determine:
+                ("system", """You are an expert database analysis agent. Your role is to identify when a user's request involves data that could be efficiently retrieved from a database, even if they don't explicitly mention database terms.
 
-1. Whether it requires database operations (SQL or NoSQL)
-2. Type of database operation (SELECT, INSERT, UPDATE, DELETE, CREATE, etc.)
-3. Database type preference (MySQL/SQL vs MongoDB/NoSQL)
-4. Extract data requirements and constraints
-5. Identify table/collection names if mentioned
-6. Determine complexity level and required permissions
+Analyze the request to determine:
+1. If it involves structured data typically stored in databases (e.g., user records, geographic data, product info)
+2. If it requires data operations (listing, filtering, aggregating, etc.)
+3. What type of database would best serve this data (SQL/NoSQL)
+4. What tables/collections might contain this data
+5. Required permissions and complexity
 
-Respond in JSON format with these fields:
+Consider these patterns that suggest database use:
+- Requests for lists or tables of information
+- Filtering by specific criteria
+- Questions about structured data (countries, products, users, etc.)
+- Requests for specific fields or attributes
+- Queries involving relationships between data
+- Economic queries (GNP, GDP, financial data)
+- Ranking or ordering data (top N, highest, lowest)
+- Demographic queries (population, statistics)
+- Geographic queries (countries, cities, regions)
+
+Respond in JSON format with:
 - requires_database: boolean
 - operation_type: string (select/insert/update/delete/create/analyze/etc.)
 - database_preference: string (mysql/mongodb/either/unknown)
-- tables_collections: list of mentioned table/collection names
-- data_requirements: list of data fields or requirements
+- tables_collections: list of likely table/collection names
+- data_requirements: list of fields or requirements
 - complexity: string (simple/moderate/complex)
 - permissions_needed: list of required permissions
 - confidence: float (0-1)
-- reasoning: string explaining the analysis
+- reasoning: string explaining why this should/shouldn't use a database
 """),
                 ("human", "Request: {request}")
             ])
@@ -93,10 +104,28 @@ Respond in JSON format with these fields:
             try:
                 analysis = json.loads(response.content)
             except json.JSONDecodeError:
-                # Fallback analysis
-                db_keywords = ['database', 'sql', 'mysql', 'mongodb', 'select', 'insert', 
-                              'update', 'delete', 'query', 'table', 'collection', 'record',
-                              'data', 'store', 'retrieve', 'search database', 'db']
+                # Fallback analysis with enhanced natural language patterns
+                db_keywords = [
+                    # Database-specific terms
+                    'database', 'sql', 'mysql', 'mongodb', 'select', 'insert', 
+                    'update', 'delete', 'query', 'table', 'collection', 'record',
+                    'data', 'store', 'retrieve', 'search database', 'db',
+                    # List/Table indicators
+                    'list', 'show', 'display', 'table', 'all', 'every',
+                    # Geographic data
+                    'countries', 'cities', 'regions', 'states', 'locations',
+                    'capitals', 'population', 'continent', 'india', 'asia',
+                    'district', 'state', 'country',
+                    # Common data operations
+                    'where', 'filter', 'group', 'sort', 'order by', 'find',
+                    # Data relationships
+                    'related', 'belongs to', 'has', 'with', 'contains',
+                    # Aggregations
+                    'count', 'total', 'average', 'maximum', 'minimum', 'top', 'highest', 'lowest',
+                    # Economic terms
+                    'gnp', 'gdp', 'economy', 'economic', 'richest', 'poorest', 'wealth', 'income',
+                    'developed', 'developing', 'trillion', 'billion', 'million'
+                ]
                 
                 needs_db = any(keyword in request.lower() for keyword in db_keywords)
                 
@@ -350,17 +379,32 @@ Respond in JSON format with these fields:
         """Generate SQL query based on request"""
         try:
             sql_prompt = ChatPromptTemplate.from_messages([
-                ("system", """You are an expert SQL query generator. Given a user request and analysis, 
-generate a safe, efficient SQL query. Follow these guidelines:
+                ("system", """You are an expert SQL query generator for the MySQL World database. Given a user request and analysis, 
+generate a safe, efficient SQL query. The World database has these main tables:
 
+- country: Information about countries
+  Columns: code, name, continent, region, surfacearea, indepyear, population, lifeexpectancy, gnp, gnpold, localname, governmentform, headofstate, capital, code2
+
+- city: Information about cities
+  Columns: id, name, countrycode, district, population
+
+- countrylanguage: Information about languages spoken in countries
+  Columns: countrycode, language, isofficial, percentage
+
+Notes:
+- The city.id column is referenced by country.capital to indicate a country's capital city
+- country.code matches with city.countrycode and countrylanguage.countrycode
+- Use simple table aliases without backticks (e.g. FROM country c JOIN city ct)
+
+Follow these guidelines:
 1. Generate only SELECT queries unless explicitly requested otherwise
 2. Use proper SQL syntax and best practices
 3. Include appropriate WHERE clauses for filtering
-4. Use LIMIT to prevent excessive results
+4. Use LIMIT to prevent excessive results (default 100)
 5. Avoid dangerous operations (DROP, TRUNCATE, etc.)
-6. Use parameterized queries when possible
+6. Use exact table and column names as shown above
 
-Return only the SQL query, nothing else.
+Return only the raw SQL query, no markdown formatting or explanation.
 """),
                 ("human", """
 User Request: {request}
@@ -380,7 +424,9 @@ SQL Query:""")
                 )
             )
             
-            sql_query = response.content.strip()
+            # Clean the SQL query by removing any markdown formatting
+            sql_query = response.content
+            sql_query = sql_query.replace('```sql', '').replace('```', '').strip()
             
             # Basic safety check
             dangerous_keywords = ['DROP', 'DELETE', 'TRUNCATE', 'ALTER', 'CREATE']
@@ -498,7 +544,15 @@ MongoDB Document:""")
                 'columns': result['columns'],
                 'query_time': result['query_time'],
                 'agent': self.agent_name,
-                'error': result.get('error')
+                'error': result.get('error'),
+                'sources': [{
+                    'type': 'database',
+                    'name': self.database_configs.get('mysql', {}).get('database', 'mysql'),
+                    'table': next(iter(analysis.get('tables_collections', [])), 'unknown'),
+                    'query': sql_query,
+                    'row_count': result['row_count'],
+                    'confidence': 1.0
+                }]
             }
         else:
             return {

@@ -72,22 +72,29 @@ Respond in JSON format with these fields:
             try:
                 analysis = json.loads(response.content)
             except json.JSONDecodeError:
-                # Fallback analysis
-                doc_keywords = ['document', 'file', 'paper', 'report', 'article', 'content',
-                               'information', 'details', 'explain', 'describe', 'summarize',
-                               'what is', 'how does', 'tell me about', 'find information']
+                # More lenient fallback analysis - RAG should handle most queries
+                # unless they clearly belong to other agents
+                other_agent_keywords = [
+                    # Calculator keywords
+                    'calculate', 'compute', 'solve equation', 'formula', 'sum', 'product',
+                    # Database specific
+                    'database query', 'sql', 'mongodb', 'insert into', 'update record',
+                    # Web search specific
+                    'search internet', 'find online', 'latest news'
+                ]
                 
-                needs_rag = any(keyword in request.lower() for keyword in doc_keywords)
+                # Only exclude if it's clearly for another agent
+                needs_other_agent = any(keyword in request.lower() for keyword in other_agent_keywords)
                 
                 analysis = {
-                    "requires_rag": needs_rag,
-                    "information_type": "factual" if needs_rag else "none",
-                    "search_scope": "broad" if needs_rag else "none",
-                    "reasoning_complexity": "moderate" if needs_rag else "none",
+                    "requires_rag": not needs_other_agent,  # Default to True unless clearly for another agent
+                    "information_type": "factual",
+                    "search_scope": "broad",
+                    "reasoning_complexity": "moderate",
                     "needs_current_info": False,
-                    "key_concepts": [request] if needs_rag else [],
-                    "confidence": 0.7 if needs_rag else 0.3,
-                    "reasoning": "Fallback analysis based on keyword detection"
+                    "key_concepts": [request],
+                    "confidence": 0.7,
+                    "reasoning": "Fallback analysis - RAG handles general queries"
                 }
             
             logger.info(f"RAG analysis: {analysis.get('requires_rag', False)}")

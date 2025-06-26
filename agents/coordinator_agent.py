@@ -403,14 +403,17 @@ Please provide a comprehensive, synthesized response.
                     'confidence': 0.0
                 }
             
-            response = self.llm.invoke(
-                synthesis_prompt.format_messages(
-                    query=query,
-                    responses=json.dumps(successful_responses, indent=2, default=str),
-                    plan=json.dumps(plan, indent=2),
-                    context=json.dumps(context or {}, indent=2)
-                )
+            # Format messages for synthesis
+            formatted_messages = synthesis_prompt.format_messages(
+                query=query,
+                responses=json.dumps(successful_responses, indent=2, default=str),
+                plan=json.dumps(plan, indent=2),
+                context=json.dumps(context or {}, indent=2)
             )
+            
+            # Get response from LLM
+            response = self.llm.invoke(formatted_messages)
+            response_content = response.content if hasattr(response, 'content') else str(response)
             
             # Collect sources from all agents
             all_sources = []
@@ -428,7 +431,7 @@ Please provide a comprehensive, synthesized response.
             overall_confidence = sum(confidence_scores) / len(confidence_scores) if confidence_scores else 0.0
             
             return {
-                'response': response.content,
+                'response': response_content,
                 'sources': all_sources,
                 'confidence': overall_confidence,
                 'successful_agents': list(successful_responses.keys()),

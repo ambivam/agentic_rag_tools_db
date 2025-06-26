@@ -160,6 +160,13 @@ Respond in JSON format with these fields:
                 'total_results': search_results.get('total_results', 0),
                 'agent': self.agent_name,
                 'confidence': analysis.get('overall_confidence', 0.5),
+                'sources': [{
+                    'type': 'web',
+                    'title': result.get('title', 'Unknown'),
+                    'url': result.get('url', ''),
+                    'domain': result.get('metadata', {}).get('domain', 'unknown'),
+                    'confidence': result.get('metadata', {}).get('confidence', 0.5)
+                } for result in search_results['results']],
                 'error': None
             }
             
