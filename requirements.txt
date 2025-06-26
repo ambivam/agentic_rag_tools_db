@@ -18,6 +18,7 @@ langgraph>=0.0.26
 # Document processing
 lxml>=4.9.3
 beautifulsoup4>=4.12.2
+python-pptx>=0.6.21
 pypdf>=3.17.1
 python-docx>=1.1.0
 openpyxl>=3.1.2

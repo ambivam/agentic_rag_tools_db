@@ -35,7 +35,7 @@ class VectorStoreManager:
         
         # FAISS-specific attributes
         self.index = None
-        self.embedding_dimension = 1536  # dimension for text-embedding-3-small
+        self.embedding_dimension = 1024  # dimension for text-embedding-3-small
         self.document_metadata = {}
         self.document_texts = []  # Store document texts separately
         self.document_ids = []    # Store document IDs for mapping
@@ -115,6 +115,16 @@ class VectorStoreManager:
             embeddings = self.embeddings.embed_documents(texts)
             embeddings_array = np.array(embeddings, dtype=np.float32)
             
+            # Debug: Check dimensions
+            actual_dim = embeddings_array.shape[1]
+            logger.info(f"Embedding dimensions - Expected: {self.embedding_dimension}, Actual: {actual_dim}")
+            if actual_dim != self.embedding_dimension:
+                logger.error(f"Dimension mismatch! FAISS index expects {self.embedding_dimension} but got {actual_dim}")
+                # Re-initialize index with correct dimension
+                self.embedding_dimension = actual_dim
+                self.index = faiss.IndexFlatL2(self.embedding_dimension)
+                logger.info(f"Re-initialized FAISS index with dimension {self.embedding_dimension}")
+            
             if show_progress:
                 status_text.text("Adding documents to FAISS index...")
                 progress_bar.progress(0.6)
@@ -155,10 +165,16 @@ class VectorStoreManager:
             return True
             
         except Exception as e:
+            import traceback
             error_msg = f"Error adding documents to vector store: {str(e)}"
             logger.error(error_msg)
+            logger.error(f"Full traceback: {traceback.format_exc()}")
             if show_progress:
                 st.error(error_msg)
+                st.error("Check the application logs for full error details")
+                # Add debug info in an expander
+                with st.expander("Debug Information"):
+                    st.code(traceback.format_exc())
             return False
     
     def similarity_search(
