@@ -195,8 +195,16 @@ Please create an optimal coordination plan.
                 )
             )
             
+            # Handle different response types
+            if isinstance(response, dict):
+                response_text = response.get('content', str(response))
+            elif hasattr(response, 'content'):
+                response_text = response.content
+            else:
+                response_text = str(response)
+                
             try:
-                plan = json.loads(response.content)
+                plan = json.loads(response_text)
             except json.JSONDecodeError:
                 # Fallback plan based on simple logic
                 activated_agents = []
@@ -400,9 +408,11 @@ Please provide a comprehensive, synthesized response.
                 return {
                     'response': "I couldn't find a suitable way to answer your question. Please try rephrasing or providing more specific details.",
                     'sources': [],
-                    'confidence': 0.0
+                    'confidence': 0.0,
+                    'successful_agents': [],
+                    'total_sources': 0
                 }
-            
+                
             # Format messages for synthesis
             formatted_messages = synthesis_prompt.format_messages(
                 query=query,
@@ -413,29 +423,37 @@ Please provide a comprehensive, synthesized response.
             
             # Get response from LLM
             response = self.llm.invoke(formatted_messages)
-            response_content = response.content if hasattr(response, 'content') else str(response)
             
-            # Collect sources from all agents
-            all_sources = []
-            for agent_name, agent_response in successful_responses.items():
-                sources = agent_response.get('sources', [])
-                if sources:
-                    for source in sources:
-                        source['agent'] = agent_name
-                        all_sources.append(source)
-            
-            # Calculate overall confidence
-            confidence_scores = [
-                resp.get('confidence', 0.5) for resp in successful_responses.values()
-            ]
-            overall_confidence = sum(confidence_scores) / len(confidence_scores) if confidence_scores else 0.0
+            # Handle different response types
+            if isinstance(response, dict):
+                response_content = response.get('content', str(response))
+            elif hasattr(response, 'content'):
+                response_content = response.content
+            elif isinstance(response, str):
+                response_content = response
+            else:
+                response_content = str(response)
+                
+            # Extract sources from agent responses
+            sources = []
+            for agent_name, resp in successful_responses.items():
+                if resp.get('sources'):
+                    for source in resp['sources']:
+                        if isinstance(source, dict):
+                            source['agent'] = agent_name
+                            sources.append(source)
+                        else:
+                            sources.append({
+                                'content': str(source),
+                                'agent': agent_name
+                            })
             
             return {
                 'response': response_content,
-                'sources': all_sources,
-                'confidence': overall_confidence,
+                'sources': sources,
+                'confidence': 0.8 if successful_responses else 0.0,
                 'successful_agents': list(successful_responses.keys()),
-                'total_sources': len(all_sources)
+                'total_sources': len(sources)
             }
             
         except Exception as e:

@@ -56,25 +56,27 @@ class DocumentProcessor:
                 "file_size": uploaded_file.size
             }
             
-            # Process based on file type
-            if file_extension == 'pdf':
-                text = self._process_pdf(uploaded_file)
-            elif file_extension in ['docx', 'doc']:
-                text = self._process_docx(uploaded_file)
-            elif file_extension == 'txt':
-                text = self._process_txt(uploaded_file)
-            elif file_extension == 'csv':
-                text = self._process_csv(uploaded_file)
-            elif file_extension in ['xlsx', 'xls']:
-                text = self._process_excel(uploaded_file)
-            elif file_extension in ['pptx', 'ppt']:
-                text = self._process_pptx(uploaded_file)
-            elif file_extension == 'json':
-                text = self._process_json(uploaded_file)
-            elif file_extension == 'html':
-                text = self._process_html(uploaded_file)
-            elif file_extension == 'xml':
-                text = self._process_xml(uploaded_file)
+            # Map file extensions to processor methods
+            extension_map = {
+                'pdf': self._process_pdf,
+                'doc': self._process_docx,
+                'docx': self._process_docx,
+                'txt': self._process_txt,
+                'csv': self._process_csv,
+                'xls': self._process_excel,
+                'xlsx': self._process_excel,
+                'ppt': self._process_pptx,
+                'pptx': self._process_pptx,
+                'json': self._process_json,
+                'html': self._process_html,
+                'htm': self._process_html,
+                'xml': self._process_xml
+            }
+            
+            # Get the appropriate processor method
+            processor = extension_map.get(file_extension)
+            if processor:
+                text = processor(uploaded_file)
             else:
                 raise ValueError(f"Unsupported file format: {file_extension}")
             

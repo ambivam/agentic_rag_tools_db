@@ -230,6 +230,10 @@ class VectorStoreManager:
                 
                 search_results.append((doc, similarity_score))
             
+            # Log each match with its score and filename
+            for doc, similarity_score in search_results:
+                logger.info(f"Match: {doc.metadata.get('filename', 'unknown')} (score: {similarity_score:.3f})")
+        
             logger.info(f"Similarity search returned {len(search_results)} results for query: {query[:50]}...")
             return search_results
             
@@ -333,7 +337,16 @@ class VectorStoreManager:
                     logger.warning(f"Error loading document IDs: {str(e)}")
                     self.document_ids = []
             
+            # Log information about loaded documents
             logger.info(f"Vector store loaded successfully from {self.vector_db_path}")
+            logger.info(f"Number of documents in vector store: {len(self.document_texts)}")
+            logger.info("Document filenames in vector store:")
+            unique_files = set()
+            for idx, metadata in self.document_metadata.items():
+                if 'filename' in metadata:
+                    unique_files.add(metadata['filename'])
+            for filename in sorted(unique_files):
+                logger.info(f"  - {filename}")
             return True
                 
         except Exception as e:

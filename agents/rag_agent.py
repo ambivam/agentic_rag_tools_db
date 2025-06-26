@@ -79,15 +79,25 @@ Respond in JSON format with these fields:
                     'calculate', 'compute', 'solve equation', 'formula', 'sum', 'product',
                     # Database specific
                     'database query', 'sql', 'mongodb', 'insert into', 'update record',
-                    # Web search specific
-                    'search internet', 'find online', 'latest news'
+                    # Web search specific - but only if explicitly asking for internet search
+                    'search internet', 'find online', 'latest news', 'search the web'
                 ]
+                
+                # Keywords that strongly suggest using RAG
+                rag_keywords = [
+                    'cost', 'price', 'pricing', 'fee', 'charge', 'subscription',
+                    'documentation', 'guide', 'manual', 'help', 'how to',
+                    'what is', 'explain', 'describe', 'tell me about'
+                ]
+                
+                # Boost RAG if query contains RAG keywords
+                has_rag_keywords = any(keyword in request.lower() for keyword in rag_keywords)
                 
                 # Only exclude if it's clearly for another agent
                 needs_other_agent = any(keyword in request.lower() for keyword in other_agent_keywords)
                 
                 analysis = {
-                    "requires_rag": not needs_other_agent,  # Default to True unless clearly for another agent
+                    "requires_rag": has_rag_keywords or not needs_other_agent,  # Use RAG if it has RAG keywords or no other agent is clearly needed
                     "information_type": "factual",
                     "search_scope": "broad",
                     "reasoning_complexity": "moderate",
@@ -208,13 +218,13 @@ Respond in JSON format with these fields:
             # Adjust search parameters
             if complexity == 'complex':
                 k = 12
-                score_threshold = 0.05
+                score_threshold = 0.01  # More lenient for complex queries
             elif complexity == 'simple':
                 k = 5
-                score_threshold = 0.2
+                score_threshold = 0.05  # More lenient for simple queries
             else:
                 k = 8
-                score_threshold = 0.1
+                score_threshold = 0.03  # More lenient for moderate queries
             
             # Perform similarity search
             search_results = self.vector_store_manager.similarity_search(
