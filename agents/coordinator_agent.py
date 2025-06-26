@@ -206,31 +206,47 @@ Please create an optimal coordination plan.
             try:
                 plan = json.loads(response_text)
             except json.JSONDecodeError:
-                # Fallback plan based on simple logic
+                # Fallback plan based on smart logic
                 activated_agents = []
                 
+                # Check if query needs current/real-time info
+                current_info_keywords = ['today', 'current', 'now', 'latest', 'weather', 'temperature', 'forecast']
+                needs_current = any(keyword in query.lower() for keyword in current_info_keywords)
+                
+                # Check each agent's analysis
                 for agent_name, analysis in agent_analyses.items():
                     if agent_name == 'calculator' and analysis.get('requires_calculation', False):
                         activated_agents.append(agent_name)
-                    elif agent_name == 'search' and analysis.get('requires_search', False):
+                    elif agent_name == 'search' and (analysis.get('requires_search', False) or needs_current):
                         activated_agents.append(agent_name)
                     elif agent_name == 'database' and analysis.get('requires_database', False):
                         activated_agents.append(agent_name)
-                    elif agent_name == 'rag' and analysis.get('requires_rag', False):
+                    elif agent_name == 'rag' and analysis.get('requires_rag', False) and not needs_current:
                         activated_agents.append(agent_name)
                 
-                # Default to RAG if no specific agents identified
+                # Default to search for current info, RAG otherwise
                 if not activated_agents:
-                    activated_agents = ['rag']
+                    if needs_current:
+                        activated_agents = ['search']
+                    else:
+                        activated_agents = ['rag']
+                
+                # Set priorities - search higher for current info
+                priorities = {}
+                for agent in activated_agents:
+                    if agent == 'search' and needs_current:
+                        priorities[agent] = 5  # Highest priority for current info
+                    else:
+                        priorities[agent] = 3  # Normal priority
                 
                 plan = {
                     "agents_to_activate": activated_agents,
-                    "execution_order": "parallel",
-                    "agent_priorities": {agent: 3 for agent in activated_agents},
+                    "execution_order": "sequential" if needs_current else "parallel",
+                    "agent_priorities": priorities,
                     "dependencies": {},
-                    "synthesis_strategy": "combine_all",
-                    "estimated_complexity": "medium",
-                    "reasoning": "Fallback coordination plan"
+                    "synthesis_strategy": "prioritize_current" if needs_current else "combine_all",
+                    "estimated_complexity": "simple" if needs_current else "medium",
+                    "reasoning": "Prioritizing current information" if needs_current else "Fallback coordination plan"
                 }
             
             return {
