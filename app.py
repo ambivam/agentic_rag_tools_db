@@ -688,13 +688,23 @@ def handle_enhanced_query_interface(enhanced_workflow, vector_store_manager):
     
     # Advanced options
     with st.expander("🎛️ Advanced Options"):
+        max_agents = st.slider("Max Agents per Query", 1, 4, 3)
+        
+        st.markdown("### Agent Selection")
+        st.markdown("*At least one agent must be selected*")
+        
         col1, col2 = st.columns(2)
         with col1:
-            max_agents = st.slider("Max Agents per Query", 1, 4, 3)
-            enable_search = st.checkbox("Enable Web Search", value=True)
+            enable_rag = st.checkbox("Enable RAG", value=True)
+            enable_search = st.checkbox("Enable Web Search", value=False)
         with col2:
-            enable_database = st.checkbox("Enable Database Query", value=True)
-            enable_calculator = st.checkbox("Enable Calculator", value=True)
+            enable_database = st.checkbox("Enable Database Query", value=False)
+            enable_calculator = st.checkbox("Enable Calculator", value=False)
+        
+        # Ensure at least one agent is selected
+        if not any([enable_rag, enable_search, enable_database, enable_calculator]):
+            st.error("⚠️ Please select at least one agent")
+            st.stop()
     
     # Query processing
     if st.button("🚀 Process Query", type="primary", disabled=not query):
@@ -705,6 +715,7 @@ def handle_enhanced_query_interface(enhanced_workflow, vector_store_manager):
                     context = {
                         'max_agents': max_agents,
                         'enabled_agents': {
+                            'rag': enable_rag,
                             'search': enable_search,
                             'database': enable_database,
                             'calculator': enable_calculator
