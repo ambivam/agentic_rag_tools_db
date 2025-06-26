@@ -10,8 +10,6 @@ import logging
 
 # File format specific imports
 try:
-    import PyPDF2
-    import pypdf
     from pypdf import PdfReader
 except ImportError:
     st.error("PDF processing libraries not installed. Please install pypdf.")
