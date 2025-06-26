@@ -170,48 +170,94 @@ Respond in JSON format with:
             Dictionary containing operation results
         """
         try:
-            logger.info(f"Executing database operation: {request[:50]}...")
-            
-            # Analyze the request
+            # Analyze request
             analysis = self.analyze_request(request)
             
             if not analysis.get('requires_database', False):
                 return {
                     'success': False,
                     'message': 'Request does not require database operations',
-                    'operation_type': 'none',
-                    'results': [],
-                    'agent': self.agent_name,
-                    'error': 'No database operation detected'
+                    'error': 'Not a database operation'
                 }
             
-            # Determine database type and operation
-            db_preference = analysis.get('database_preference', 'either')
-            operation_type = analysis.get('operation_type', 'select')
+            # Ensure database connections
+            mysql_connected = False
+            mongodb_connected = False
             
-            # Execute based on preference and availability
-            if db_preference == 'mysql' or (db_preference == 'either' and self.mysql_tool):
-                return self._execute_mysql_operation(request, analysis, context)
-            elif db_preference == 'mongodb' or (db_preference == 'either' and self.mongodb_tool):
-                return self._execute_mongodb_operation(request, analysis, context)
+            if analysis['database_preference'] in ['mysql', 'either']:
+                if self.mysql_tool and 'mysql' not in self.active_connections:
+                    mysql_result = self.mysql_tool.connect(self.database_configs.get('mysql', {}))
+                    if mysql_result['success']:
+                        self.active_connections['mysql'] = mysql_result
+                        mysql_connected = True
+                else:
+                    mysql_connected = 'mysql' in self.active_connections
+            
+            if analysis['database_preference'] in ['mongodb', 'either']:
+                if self.mongodb_tool and 'mongodb' not in self.active_connections:
+                    mongodb_result = self.mongodb_tool.connect(self.database_configs.get('mongodb', {}))
+                    if mongodb_result['success']:
+                        self.active_connections['mongodb'] = mongodb_result
+                        mongodb_connected = True
+                else:
+                    mongodb_connected = 'mongodb' in self.active_connections
+            
+            # Execute operation based on database type and connection status
+            if analysis['database_preference'] == 'mysql':
+                if mysql_connected or 'mysql' in self.active_connections:
+                    return self._execute_mysql_operation(request, analysis, context)
+                else:
+                    return {
+                        'success': False,
+                        'message': 'MySQL connection not available',
+                        'error': 'Connection failed or not configured'
+                    }
+                    
+            elif analysis['database_preference'] == 'mongodb':
+                if mongodb_connected or 'mongodb' in self.active_connections:
+                    return self._execute_mongodb_operation(request, analysis, context)
+                else:
+                    return {
+                        'success': False,
+                        'message': 'MongoDB connection not available',
+                        'error': 'Connection failed or not configured'
+                    }
+                    
             else:
-                return {
-                    'success': False,
-                    'message': 'No suitable database tool available',
-                    'operation_type': operation_type,
-                    'results': [],
-                    'agent': self.agent_name,
-                    'error': 'Database tools not available or configured'
-                }
+                # Try both if no preference
+                results = []
+                
+                if mysql_connected or 'mysql' in self.active_connections:
+                    mysql_result = self._execute_mysql_operation(request, analysis, context)
+                    if mysql_result['success']:
+                        return mysql_result
+                    results.append(('MySQL', mysql_result.get('error')))
+                
+                if mongodb_connected or 'mongodb' in self.active_connections:
+                    mongodb_result = self._execute_mongodb_operation(request, analysis, context)
+                    if mongodb_result['success']:
+                        return mongodb_result
+                    results.append(('MongoDB', mongodb_result.get('error')))
+                
+                if not results:
+                    return {
+                        'success': False,
+                        'message': 'No database connections available',
+                        'error': 'Configure and connect to a database first'
+                    }
+                else:
+                    errors = '; '.join([f"{db}: {err}" for db, err in results])
+                    return {
+                        'success': False,
+                        'message': 'Failed to execute on any available database',
+                        'error': errors
+                    }
                 
         except Exception as e:
             logger.error(f"Database operation error: {str(e)}")
             return {
                 'success': False,
                 'message': 'Database operation failed',
-                'operation_type': 'error',
-                'results': [],
-                'agent': self.agent_name,
                 'error': str(e)
             }
     
