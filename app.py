@@ -704,9 +704,11 @@ def handle_enhanced_query_interface(enhanced_workflow, vector_store_manager):
                     # Prepare context
                     context = {
                         'max_agents': max_agents,
-                        'enable_search': enable_search,
-                        'enable_database': enable_database,
-                        'enable_calculator': enable_calculator,
+                        'enabled_agents': {
+                            'search': enable_search,
+                            'database': enable_database,
+                            'calculator': enable_calculator
+                        },
                         'ui_context': 'streamlit_interface'
                     }
                     

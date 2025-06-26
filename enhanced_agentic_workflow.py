@@ -144,12 +144,15 @@ Please analyze and preprocess this query.
                     "confidence": 0.6
                 }
             
-            state["metadata"] = {
+            # Update metadata while preserving existing values
+            metadata = state.get("metadata", {})
+            metadata.update({
                 "preprocessing": preprocessing_result,
                 "original_query": query,
                 "query_length": len(query),
                 "has_chat_history": bool(chat_history)
-            }
+            })
+            state["metadata"] = metadata
             state["current_step"] = "query_preprocessing_complete"
             
             logger.info(f"Query preprocessing complete: {preprocessing_result.get('query_type', 'unknown')}")
@@ -173,7 +176,8 @@ Please analyze and preprocess this query.
             context = {
                 "preprocessing": preprocessing,
                 "metadata": state.get("metadata", {}),
-                "chat_history_length": len(chat_history)
+                "chat_history_length": len(chat_history),
+                "enabled_agents": state.get("metadata", {}).get("enabled_agents", {})
             }
             
             # Use coordinator to analyze and execute agents

@@ -136,14 +136,23 @@ class CoordinatorAgent:
                                  chat_history: List[BaseMessage] = None) -> Dict[str, Any]:
         """Create a coordination plan for agent execution"""
         try:
-            # Get analysis from each agent
+            # Get enabled agents from context
+            enabled_agents = context.get('enabled_agents', {}) if context else {}
+            enable_calculator = enabled_agents.get('calculator', False)
+            
+            # Get analysis from enabled agents
             agent_analyses = {}
             
-            # Analyze with each agent
-            agent_analyses['calculator'] = self.calculator_agent.analyze_request(query)
-            agent_analyses['search'] = self.search_agent.analyze_request(query)
-            agent_analyses['database'] = self.database_agent.analyze_request(query)
-            agent_analyses['rag'] = self.rag_agent.analyze_request(query)
+            # Only analyze with enabled agents
+            if enabled_agents.get('calculator', False):
+                agent_analyses['calculator'] = self.calculator_agent.analyze_request(query)
+            if enabled_agents.get('search', False):
+                agent_analyses['search'] = self.search_agent.analyze_request(query)
+            if enabled_agents.get('database', False):
+                agent_analyses['database'] = self.database_agent.analyze_request(query)
+            # Use RAG only if no other agents are enabled
+            if not any(enabled_agents.values()):
+                agent_analyses['rag'] = self.rag_agent.analyze_request(query)
             
             # Create coordination plan using LLM
             coordination_prompt = ChatPromptTemplate.from_messages([
@@ -206,38 +215,45 @@ Please create an optimal coordination plan.
             try:
                 plan = json.loads(response_text)
             except json.JSONDecodeError:
-                # Fallback plan based on smart logic
+                # Fallback plan based on enabled agents
                 activated_agents = []
                 
-                # Check if query needs current/real-time info
-                current_info_keywords = ['today', 'current', 'now', 'latest', 'weather', 'temperature', 'forecast']
-                needs_current = any(keyword in query.lower() for keyword in current_info_keywords)
-                
-                # Check each agent's analysis
+                # Only activate enabled agents that indicate they can help
                 for agent_name, analysis in agent_analyses.items():
-                    if agent_name == 'calculator' and analysis.get('requires_calculation', False):
+                    if agent_name == 'calculator' and enabled_agents.get('calculator', False) and analysis.get('requires_calculation', False):
                         activated_agents.append(agent_name)
-                    elif agent_name == 'search' and (analysis.get('requires_search', False) or needs_current):
+                    elif agent_name == 'search' and enabled_agents.get('search', False) and (analysis.get('requires_search', False) or any(word in query.lower() for word in ['current', 'latest', 'today'])):
                         activated_agents.append(agent_name)
-                    elif agent_name == 'database' and analysis.get('requires_database', False):
+                    elif agent_name == 'database' and enabled_agents.get('database', False) and analysis.get('requires_database', False):
                         activated_agents.append(agent_name)
-                    elif agent_name == 'rag' and analysis.get('requires_rag', False) and not needs_current:
+                    elif agent_name == 'rag' and not any(enabled_agents.values()) and analysis.get('requires_rag', False):
                         activated_agents.append(agent_name)
                 
-                # Default to search for current info, RAG otherwise
+                # Default to enabled agents if none were activated by analysis
                 if not activated_agents:
-                    if needs_current:
+                    if enabled_agents.get('calculator', False):
+                        activated_agents = ['calculator']
+                    elif enabled_agents.get('search', False):
                         activated_agents = ['search']
+                    elif enabled_agents.get('database', False):
+                        activated_agents = ['database']
                     else:
                         activated_agents = ['rag']
                 
-                # Set priorities - search higher for current info
+                # Set priorities based on query type
                 priorities = {}
                 for agent in activated_agents:
-                    if agent == 'search' and needs_current:
-                        priorities[agent] = 5  # Highest priority for current info
+                    if agent == 'calculator':
+                        priorities[agent] = 5 if any(word in query.lower() for word in ['calculate', 'compute', 'sum']) else 3
+                    elif agent == 'search':
+                        priorities[agent] = 5 if any(word in query.lower() for word in ['current', 'latest', 'today']) else 3
+                    elif agent == 'database':
+                        priorities[agent] = 5 if any(word in query.lower() for word in ['list', 'show', 'find', 'query']) else 3
                     else:
-                        priorities[agent] = 3  # Normal priority
+                        priorities[agent] = 3
+                
+                # Check if query needs current/real-time info
+                needs_current = any(word in query.lower() for word in ['current', 'latest', 'today', 'now'])
                 
                 plan = {
                     "agents_to_activate": activated_agents,
