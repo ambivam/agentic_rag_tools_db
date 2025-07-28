@@ -1089,41 +1089,43 @@ def handle_search_tool():
 
 def handle_database_tools():
     """Handle database tools interface"""
-    st.subheader("🗄️ Database Tools")
+    st.markdown("### 🗄️ Database Tools")
     
-    # Database availability check
-    col1, col2 = st.columns(2)
+    # Initialize database configurations
+    database_configs = {
+        'mysql': Config.DATABASE_CONFIGS.get('mysql', {}),
+        'mongodb': Config.DATABASE_CONFIGS.get('mongodb', {})
+    }
     
-    with col1:
-        st.markdown("### 🐬 MySQL")
-        if MYSQL_AVAILABLE:
-            st.success("✅ MySQL Support Available")
-        else:
-            st.error("❌ MySQL Support Not Available")
-            st.markdown("Install with: `pip install mysql-connector-python`")
+    # Create tabs for different database interfaces
+    db_tab1, db_tab2, db_tab3 = st.tabs(["💬 Chat Interface", "MySQL Settings", "MongoDB Settings"])
     
-    with col2:
-        st.markdown("### 🍃 MongoDB")
-        if MONGODB_AVAILABLE:
-            st.success("✅ MongoDB Support Available")
-        else:
-            st.error("❌ MongoDB Support Not Available")
-            st.markdown("Install with: `pip install pymongo`")
-    
-    # Database configuration
-    st.markdown("### ⚙️ Database Configuration")
-    
-    db_tab1, db_tab2 = st.tabs(["MySQL Config", "MongoDB Config"])
-    
+    # Chat Interface Tab
     with db_tab1:
+        if not (MYSQL_AVAILABLE or MONGODB_AVAILABLE):
+            st.warning("Please install and configure MySQL or MongoDB to use the chat interface.")
+        else:
+            from agents.database_chat import create_database_chat
+            
+            # Create database chat instance
+            chat = create_database_chat(
+                openai_api_key=Config.OPENAI_API_KEY,
+                database_configs=database_configs
+            )
+            
+            # Render chat interface
+            chat.render_chat_interface()
+    
+    # MySQL Settings Tab
+    with db_tab2:
         if MYSQL_AVAILABLE:
             st.markdown("**MySQL Connection Settings:**")
             mysql_config = {
-                'host': st.text_input("Host", value=Config.DATABASE_CONFIGS['mysql']['host']),
-                'port': st.number_input("Port", value=Config.DATABASE_CONFIGS['mysql']['port']),
-                'user': st.text_input("Username", value=Config.DATABASE_CONFIGS['mysql']['user']),
-                'password': st.text_input("Password", type="password"),
-                'database': st.text_input("Database", value=Config.DATABASE_CONFIGS['mysql']['database'])
+                'host': st.text_input("Host", value=database_configs['mysql'].get('host', 'localhost'), key="mysql_host"),
+                'port': st.number_input("Port", value=database_configs['mysql'].get('port', 3306), key="mysql_port"),
+                'user': st.text_input("Username", value=database_configs['mysql'].get('user', ''), key="mysql_user"),
+                'password': st.text_input("Password", type="password", key="mysql_pass"),
+                'database': st.text_input("Database", value=database_configs['mysql'].get('database', ''), key="mysql_db")
             }
             
             if st.button("🔌 Test MySQL Connection"):
@@ -1145,15 +1147,16 @@ def handle_database_tools():
         else:
             st.info("MySQL support not available. Install the required package to use MySQL features.")
     
-    with db_tab2:
+    # MongoDB Settings Tab
+    with db_tab3:
         if MONGODB_AVAILABLE:
             st.markdown("**MongoDB Connection Settings:**")
             mongodb_config = {
-                'host': st.text_input("Host", value=Config.DATABASE_CONFIGS['mongodb']['host'], key="mongo_host"),
-                'port': st.number_input("Port", value=Config.DATABASE_CONFIGS['mongodb']['port'], key="mongo_port"),
-                'username': st.text_input("Username", value=Config.DATABASE_CONFIGS['mongodb'].get('username', ''), key="mongo_user"),
+                'host': st.text_input("Host", value=database_configs['mongodb'].get('host', 'localhost'), key="mongo_host"),
+                'port': st.number_input("Port", value=database_configs['mongodb'].get('port', 27017), key="mongo_port"),
+                'username': st.text_input("Username", value=database_configs['mongodb'].get('username', ''), key="mongo_user"),
                 'password': st.text_input("Password", type="password", key="mongo_pass"),
-                'database': st.text_input("Database", value=Config.DATABASE_CONFIGS['mongodb']['database'], key="mongo_db")
+                'database': st.text_input("Database", value=database_configs['mongodb'].get('database', ''), key="mongo_db")
             }
             
             if st.button("🔌 Test MongoDB Connection"):
@@ -1171,34 +1174,22 @@ def handle_database_tools():
                         st.error(f"❌ Connection error: {str(e)}")
         else:
             st.info("MongoDB support not available. Install the required package to use MongoDB features.")
+
+    # Sample queries
+    st.markdown("### 📝 Sample Queries")
+    with st.expander("View Sample Natural Language Queries"):
+        st.markdown("""
+        Try asking questions like:
+        - Show me all users
+        - Find products that cost more than $100
+        - How many orders were placed today?
+        - List all active customers
+        - What's the total revenue for this month?
+        - Show me the top 5 selling products
+        - Find orders with status 'pending'
+        """)
     
-    # Database operations
-    if MYSQL_AVAILABLE or MONGODB_AVAILABLE:
-        st.markdown("### 💾 Database Operations")
-        
-        db_operation = st.selectbox(
-            "Choose Operation:",
-            ["Select Data", "Insert Data", "Update Data", "Delete Data", "Show Tables/Collections"]
-        )
-        
-        if db_operation == "Select Data":
-            col1, col2 = st.columns(2)
-            with col1:
-                table_name = st.text_input("Table/Collection Name", placeholder="users")
-            with col2:
-                limit = st.number_input("Limit Results", min_value=1, max_value=100, value=10)
-            
-            query_filter = st.text_area(
-                "Query Filter (JSON for MongoDB, WHERE clause for MySQL):",
-                placeholder='{"status": "active"} or WHERE status = "active"'
-            )
-            
-            if st.button("📊 Execute Query"):
-                st.info("Database query execution would be implemented here with proper connection handling.")
-        
-        elif db_operation == "Show Tables/Collections":
-            if st.button("📋 Show Database Structure"):
-                st.info("Database structure display would be implemented here.")
+
     
     # Sample queries
     st.markdown("### 📝 Sample Queries")
